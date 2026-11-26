@@ -96,6 +96,8 @@ variants() {
   run inv_v7_win520   --mech mech_filters_SS10_v7.npz   $COMMON $V7 --window -225 -185
   bash $CODE/recovery_mismatch.sh                                                           # recovery against a mismatched 410 or 660
   bash $CODE/recovery_narrow.sh                                                             # the reverse: 410/660 narrower than the library
+  bash $CODE/round3.sh                                                                      # 660 timing, amplitude mismatch, matched grids, R(k), auto-picked records
+  bash $CODE/round4.sh                                                                      # cold lower layer, Clapeyron 660, combined amplitude mismatch, chi2 by record count, block bootstrap
   python $CODE/compare_runs.py inv_v7_SS10 \
     "optimised (profile) A,τ instead of marginal=inv_v7_profile" \
     "independent-sample likelihood, bootstrap σ=inv_v7_pre_SS10" \
@@ -118,6 +120,20 @@ variants() {
     "recovery, uniform model, 410 narrowed 7 %=recmm_410n07" \
     "recovery, uniform model, 410 narrowed 20 %=recmm_410n20" \
     "recovery, uniform model, 660 narrowed 7 %=recmm_660n07" \
+    "matched grids across classes=inv_v7_matched" \
+    "library 660 shifted +1 s=inv_v7_d660p1" \
+    "library 660 shifted -1 s=inv_v7_d660m1" \
+    "library 660 shifted +3.5 s=inv_v7_d660p" \
+    "library 660 shifted -3.5 s=inv_v7_d660m" \
+    "recovery, uniform model, 410 amplitude x 0.8=recmm_410a08" \
+    "recovery, uniform model, 410 amplitude x 1.25=recmm_410a125" \
+    "recovery, uniform model, 660 amplitude x 0.8=recmm_660a08" \
+    "recovery, uniform model, 660 amplitude x 1.25=recmm_660a125" \
+    "lower layer and uniform models down to 1300 K=inv_v7_t2min1300" \
+    "660 moved with lower-layer temperature (-0.075 km/K)=inv_v7_clap" \
+    "both of the above=inv_v7_clap_t1300" \
+    "recovery, uniform model, 410 x 1.2 and 660 x 0.8=recmm_410up660dn" \
+    "recovery, uniform model, 410 x 0.8 and 660 x 1.2=recmm_410dn660up" \
     --csv sensitivity_v7.csv
   python $CODE/misfit_by_window.py $(xs 10) $(inp 10) inv_v7_SS10 --lib $LIB --mech mech_filters_SS10_v7.npz    # where the M2 improvement sits
   python $CODE/pulse_widths.py     $(xs 10) $(inp 10) inv_v7_SS10 --lib $LIB --mech mech_filters_SS10_v7.npz    # observed vs synthetic pulse widths

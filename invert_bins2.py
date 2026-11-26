@@ -7,7 +7,7 @@ For bin b and model m the synthetic is
     g_bm(t) = h_b * ( sum_D W_b(D) S_m(D, t) )
   S_m(D,t)  model m's single-source trace at distance D, pre-shifted onto the reference slowness
             curve (pack_models.py)                      -> exact distance effect, per model
-  W_b(D)    SNR-weighted distance histogram of the bin's records (from the per-cap record lists)
+  W_b(D)    SNR-weighted distance histogram of the bin's records (from Lauren's input files)
   h_b       per-bin FIR correcting for source mechanisms/depths (mech_filter.py; optional)
 Then as before: Gaussian likelihood on -300..-110 s with free amplitude A in [0.3, 3] and shift
 tau in [-12, 12] s, evidence per class = mean likelihood over the class grid, Bayes factors.
@@ -64,10 +64,12 @@ def bin_weights(path, dist):
 
 
 def apply_d660(G, tg, d660, t_split=-195.0, ramp=20.0):
-    if d660 == 0.0:
+    """Shift the part of every trace before t_split (the 660 region) by d660 s (scalar, or one value per model)."""
+    d660 = np.broadcast_to(np.asarray(d660, float), (len(G),))
+    if not np.any(d660):
         return G
     wgt = 0.5 * (1 - np.tanh((tg - t_split) / (ramp / 4)))
-    Gs = np.array([np.interp(tg - d660, tg, g) for g in G])
+    Gs = np.array([np.interp(tg - d, tg, g) for g, d in zip(G, d660)])
     return wgt * Gs + (1 - wgt) * G
 
 
@@ -93,6 +95,14 @@ def narrow_pulse(g, tg, frac, t_lo, t_hi, ramp=20.0):
     return wgt * gp + (1 - wgt) * g
 
 
+def scale_pulse(g, tg, fac, t_lo, t_hi, ramp=20.0):
+    """Scale the pulse between t_lo and t_hi by fac (amplitude-only mismatch), with smooth edges."""
+    if fac == 1.0:
+        return g
+    wgt = 0.5 * (1 + np.tanh((tg - t_lo) / (ramp / 4))) * 0.5 * (1 - np.tanh((tg - t_hi) / (ramp / 4)))
+    return g * (1 + (fac - 1) * wgt)
+
+
 def envnorm(x, win=60):
     env = np.sqrt(uniform_filter1d(x * x, int(win / DT), mode="nearest", axis=-1)) + 1e-9
     return x / env, env
@@ -103,12 +113,19 @@ def main():
     ap.add_argument("obs_dir"); ap.add_argument("inputs_dir"); ap.add_argument("out")
     ap.add_argument("--lib", nargs="+", required=True); ap.add_argument("--mech", default=None)
     ap.add_argument("--d660", type=float, default=0.0); ap.add_argument("--dT-prior", type=float, nargs=2, default=None)
+    ap.add_argument("--t2min", type=int, default=1400, help="lowest potential temperature admitted for uniform models and for the lower layer (default 1400 K)")
+    ap.add_argument("--clapeyron", type=float, default=0.0, metavar="DZDT",
+                    help="move the 660 of every model with the temperature of its lower layer: depth change DZDT km/K (e.g. -0.075 for -2.8 MPa/K) relative to --t660-ref, converted to time at 0.35 s/km")
+    ap.add_argument("--t660-ref", type=float, default=1600.0, help="temperature at which the library 660 is left unshifted by --clapeyron")
+    ap.add_argument("--s-per-km", type=float, default=0.35, help="SdS-SS time change per km of 660 depth (s/km, positive; deeper = earlier)")
     ap.add_argument("--shape-only", action="store_true"); ap.add_argument("--noise-factor", type=float, default=1.5)
     ap.add_argument("--only", default=None)
     ap.add_argument("--synthetic", default=None, help="model name to use as fake data (recovery test), built with each bin's own geometry")
     ap.add_argument("--amp", type=float, default=0.6); ap.add_argument("--noise", type=float, default=0.004); ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--syn-660", type=float, nargs=2, default=(0.0, 0.0), metavar=("SHIFT", "BROADEN"), help="recovery test: shift (s) and Gaussian broadening (sigma, s) applied to the 660 pulse (-300..-210 s) of the synthetic data only")
     ap.add_argument("--syn-410", type=float, nargs=2, default=(0.0, 0.0), metavar=("SHIFT", "BROADEN"), help="recovery test: the same for the 410 pulse (-190..-110 s) of the synthetic data only")
+    ap.add_argument("--syn-410-amp", type=float, default=1.0, metavar="FAC", help="recovery test: scale the 410 pulse of the synthetic data by FAC (amplitude-only mismatch)")
+    ap.add_argument("--syn-660-amp", type=float, default=1.0, metavar="FAC", help="recovery test: the same for the 660 pulse")
     ap.add_argument("--syn-410-narrow", type=float, default=0.0, metavar="FRAC", help="recovery test: narrow the 410 pulse of the synthetic data by this fraction of its width (e.g. 0.07)")
     ap.add_argument("--syn-660-narrow", type=float, default=0.0, metavar="FRAC", help="recovery test: the same for the 660 pulse")
     ap.add_argument("--noise-obs", action="store_true", help="recovery test with each cap's own bootstrap sigma(t) as the noise level instead of --noise")
@@ -119,19 +136,20 @@ def main():
     ap.add_argument("--amp-range", type=float, nargs=2, default=(0.3, 3.0), help="bounds of the free amplitude factor")
     ap.add_argument("--marginal", action="store_true", help="marginalise the amplitude factor (flat prior on --amp-range, analytic) and the time shift (flat prior on ±tau-max) instead of maximising them")
     ap.add_argument("--corr-noise", default=None, help="npz with the noise autocorrelation R(lag) (from noise_corr.py); likelihood uses the full covariance diag(s) R diag(s)")
-    ap.add_argument("--exclude", default=None, help="drop library models whose name contains this string (e.g. w40 to keep only sharp interfaces)")
+    ap.add_argument("--exclude", nargs="+", default=None, help="drop library models whose name contains any of these strings (e.g. w40 to keep only sharp interfaces)")
     ap.add_argument("--noise-fit", action="store_true",
                     help="per-bin noise inflation: if the best model of all classes has reduced chi2 > 1, scale sigma by sqrt(chi2) so that it equals 1 (never deflate)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    global TW, TAUS
+    global TW, TAUS, T2MIN
     if a.window: TW = tuple(a.window)
     TAUS = np.arange(-a.tau_max, a.tau_max + 1, 1)
 
+    T2MIN = a.t2min
     names, S, meta, tg, dist = load_lib(a.lib)
     if a.exclude:
-        keep = [i for i, n in enumerate(names) if a.exclude not in n]; names = [names[i] for i in keep]; S = S[keep]; meta = [meta[i] for i in keep]
-        print(f"excluded models containing '{a.exclude}': {len(names)} remain", flush=True)
+        keep = [i for i, n in enumerate(names) if not any(x in n for x in a.exclude)]; names = [names[i] for i in keep]; S = S[keep]; meta = [meta[i] for i in keep]
+        print(f"excluded models containing {a.exclude}: {len(names)} remain", flush=True)
     cls = np.array([m["cls"] for m in meta]); T1 = np.array([m["T1"] for m in meta]); T2 = np.array([m["T2"] for m in meta])
     f1 = np.array([m["f1"] for m in meta]); f2 = np.array([m["f2"] for m in meta])
     print(f"{len(names)} models: M0 {np.sum(cls=='M0')}, M1 {np.sum(cls=='M1')}, M2 {np.sum(cls=='M2')}", flush=True)
@@ -143,6 +161,9 @@ def main():
     rng = np.random.default_rng(a.seed)
     lp_dT = 0.0 if a.dT_prior is None else -0.5 * ((T2 - T1 - a.dT_prior[0]) / a.dT_prior[1]) ** 2
     isyn = names.index(a.synthetic) if a.synthetic else None
+    d660 = a.d660 - a.s_per_km * a.clapeyron * (T2 - a.t660_ref)      # per-model 660 shift: colder lower layer -> deeper 660 -> earlier arrival (negative)
+    if a.clapeyron:
+        print(f"Clapeyron 660: {a.clapeyron} km/K about {a.t660_ref:.0f} K -> shifts from {d660.min():+.1f} to {d660.max():+.1f} s", flush=True)
 
     Rinv = None
     if a.corr_noise:
@@ -165,7 +186,7 @@ def main():
         if mech is not None and name in mech:
             h = mech[name]
             G = np.array([np.convolve(g, h, mode="same") for g in G])   # verified: equals mech_filter X@h
-        G = apply_d660(G, tg, a.d660)
+        G = apply_d660(G, tg, d660)
         if a.lowpass:
             from scipy.signal import butter, sosfiltfilt
             sos_lp = butter(4, 1.0 / a.lowpass, btype="low", fs=1.0 / DT, output="sos"); G = sosfiltfilt(sos_lp, G, axis=-1)
@@ -180,6 +201,7 @@ def main():
             s = np.interp(tobs, t, sg) if a.noise_obs else np.full(nt, a.noise)   # per-cap bootstrap sigma or a fixed level
             gsyn = perturb_pulse(G[isyn], tg, *a.syn_660, -300.0, -210.0); gsyn = perturb_pulse(gsyn, tg, *a.syn_410, -190.0, -110.0)   # discontinuity mismatch, data only
             gsyn = narrow_pulse(gsyn, tg, a.syn_410_narrow, -190.0, -140.0); gsyn = narrow_pulse(gsyn, tg, a.syn_660_narrow, -265.0, -210.0)
+            gsyn = scale_pulse(gsyn, tg, a.syn_410_amp, -190.0, -140.0); gsyn = scale_pulse(gsyn, tg, a.syn_660_amp, -265.0, -210.0)
             d = a.amp * gsyn[i0:i0 + nt] + s * eps
         else:
             d = np.interp(tobs, t, x); s = np.interp(tobs, t, sg) * a.noise_factor
@@ -207,16 +229,16 @@ def main():
                     llA = -0.5 * (Sdd - Sgd ** 2 / Sgg) + 0.5 * np.log(2 * np.pi / Sgg) - np.log(Amax - Amin)
                     z = np.sqrt(Sgg / 2); frac = 0.5 * (erf((Amax - Ahat) * z) - erf((Amin - Ahat) * z))
                     ll_tau.append(llA + np.log(np.maximum(frac, 1e-300)))
-            prof_max = best_ll.max()
+            prof_max = best_ll.max(); prof_ll = best_ll.copy()
             if a.marginal:   # flat prior on tau: average over the shifts
                 from scipy.special import logsumexp
                 best_ll = logsumexp(np.array(ll_tau), axis=0) - np.log(len(TAUS))
-            return best_ll, best_tau, best_A, prof_max
-        best_ll, best_tau, best_A, prof_max = evaluate(s)
+            return best_ll, best_tau, best_A, prof_max, prof_ll
+        best_ll, best_tau, best_A, prof_max, prof_ll = evaluate(s)
         nscale = 1.0; chi2_nom = -2 * prof_max / nt   # r^T C^-1 r / N of the best model (profile A, tau) at the bootstrap noise
         if a.noise_fit:   # per-cap noise inflation from the best profile fit (r^T C^-1 r / N of the best model of any class); then everything is recomputed with the inflated sigma
             if chi2_nom > 1.0:
-                nscale = chi2_nom; s = s * np.sqrt(nscale); best_ll, best_tau, best_A, _ = evaluate(s)
+                nscale = chi2_nom; s = s * np.sqrt(nscale); best_ll, best_tau, best_A, _, prof_ll = evaluate(s)
         ll = best_ll + lp_dT
         llmax = ll.max()
         res = {}
@@ -226,7 +248,7 @@ def main():
                 continue
             wts = np.exp(ll[k] - llmax); Z = wts.mean(); pp = wts / wts.sum(); ib = np.argmax(ll[k]); idx = np.where(k)[0]
             res[c] = dict(n=int(k.sum()), logZ=float(np.log(Z) + llmax), best=names[idx[ib]], best_ll=float(ll[idx[ib]]),
-                          best_tau=float(best_tau[idx[ib]]), best_A=float(best_A[idx[ib]]),
+                          best_tau=float(best_tau[idx[ib]]), best_A=float(best_A[idx[ib]]), chi2_best=float(-2 * prof_ll[idx[ib]] / nt),
                           mean_dT=float((pp * (T2[k] - T1[k])).sum()), mean_df=float((pp * (f2[k] - f1[k])).sum()),
                           mean_T1=float((pp * T1[k]).sum()), mean_f1=float((pp * f1[k]).sum()),
                           post_T1={float(v): float(pp[T1[k] == v].sum()) for v in np.unique(T1[k])},
@@ -239,7 +261,7 @@ def main():
         lat, lon = re.findall(r"(n?\d+\.?\d*)_(\d+\.?\d*)", name)[0]
         lat = -float(lat[1:]) if lat.startswith("n") else float(lat); lon = float(lon)
         out = dict(bin=name, lat=lat, lon=lon, n_records=nrec, n_data=nt, chi2_red_best=float(chi2), lnB10=float(lnB10), lnB21=float(lnB21),
-                   d660=a.d660, dT_prior=a.dT_prior, shape_only=a.shape_only, mech=bool(mech), noise_scale=float(nscale), marginal=bool(a.marginal), corr_noise=a.corr_noise, classes=res)
+                   d660=a.d660, clapeyron=a.clapeyron, t2min=a.t2min, dT_prior=a.dT_prior, shape_only=a.shape_only, mech=bool(mech), noise_scale=float(nscale), marginal=bool(a.marginal), corr_noise=a.corr_noise, classes=res)
         json.dump(out, open(os.path.join(a.out, name + ".json"), "w"), indent=1)
         rows.append((lat, lon, chi2, lnB10, lnB21, res.get("M1", {}).get("mean_dT", float("nan")), res.get("M2", {}).get("mean_df", float("nan")),
                      f1[ib], f2[ib], T1[ib], T2[ib], best_A[ib], best_tau[ib], nrec))
