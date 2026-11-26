@@ -1,0 +1,14 @@
+name: mtz520
+channels: [conda-forge]
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy=1.11
+  - pandas
+  - matplotlib=3.8
+  - obspy=1.4
+  - netcdf4
+  - cartopy=0.22
+  - pygmt=0.10
+  - gmt=6.4
+  - gplately

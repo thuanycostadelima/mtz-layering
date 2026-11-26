@@ -1,0 +1,21 @@
+variant,caps,M0 (%),M1 (%),M2 (%),f₂ > f₁ in M2 (%),"r(P(M2), ref)",same class as ref (%)
+"reference: correlated noise, marginal A,τ, B > 20",525,73,14,13,100,1.00,100
+"reference, B > 10",525,68,16,15,100,1.00,95
+"optimised (profile) A,τ instead of marginal",525,73,14,12,100,1.00,99
+"independent-sample likelihood, bootstrap σ",525,33,33,33,94,0.71,56
+"independent samples, σ × 1.5",525,47,30,22,96,0.80,70
+"independent samples, σ × 2",525,67,19,14,97,0.86,89
+"prior N(0, 150 K) on T₂ − T₁",525,74,14,13,100,1.00,99
+mechanism filter from reference model B,525,71,16,12,100,0.98,97
+no mechanism filter,525,61,22,17,99,0.61,74
+"single 124° trace, no cap geometry (independent-sample likelihood)",525,33,37,30,96,0.19,41
+sharp interfaces only,525,72,14,14,100,0.99,98
+gradational interfaces only,525,76,13,11,100,0.96,96
+fit window without the 660 (−195 to −110 s),525,80,10,10,100,0.36,73
+fit window without the 410 (−300 to −185 s),525,93,5,2,60,0.06,71
+fit window 520 region only (−225 to −185 s),525,94,4,2,36,0.08,72
+"recovery, uniform model, 660 broadened 3 s",525,94,0,6,100,0.02,71
+"recovery, uniform model, 410 broadened 3 s",525,96,0,4,0,-0.01,72
+"recovery, uniform model, both broadened 1.5 s (observed)",525,99,0,1,50,-0.17,72
+"recovery, uniform model, 660 broadened 6 s",525,63,0,37,100,0.17,62
+"recovery, uniform model, 410 broadened 6 s",525,65,1,34,0,0.18,63
