@@ -18,6 +18,7 @@ Clone the repository as `code/` inside the working directory that holds the data
 mtzsyn/
   code/                                                       this repository
   tables/ (in the repository)                                 v7_SS<r>_results.csv, v7_SS<r>_fields.csv, sensitivity_v7.csv, picks_*_v7.csv, figS10_subd*.csv
+  gallery/ (in the repository)                                fits_SS<r>.pdf: data and best-fitting model of each class for every cap at every radius (plot_all_fits.py)
   crosssections_2024_SNR/SS/<r>deg_caps/<lat>_<lon>.txt      observed stacks: t, slowness, amplitude, bootstrap σ
   crosssections_2024_SNR/SSinputs/<r>deg_caps/<lat>_<lon>.txt  records of each cap: id, event, station, distance, bounce point, SNR weight
   crosssections_2024_SNR/PP/, PPinputs/                      the same for PP
