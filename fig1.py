@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Figure 1 — the data (Nature Communications double column, 183 mm).
+Figure 1 — the data (double column, 183 mm).
 
   (a) SS coverage: cap centres coloured by number of records        (b) PP coverage, same colour scale
   (c) global average SS and PP precursor stacks (all caps)           (d–f) three example caps, SS and PP on the same depth axis

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Figure 2 — forward modelling (Nature Communications double column, 183 mm).
+Figure 2 — forward modelling (double column, 183 mm).
 
   (a–c) the three model classes: Vs profiles (left) and SS synthetic stacks at 124° (right) for M0 / M1 / M2
   (d) one cap: observed stack vs the single 124° synthetic vs the synthetic stacked with the cap's real geometry
