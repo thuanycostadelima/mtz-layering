@@ -98,6 +98,7 @@ variants() {
   bash $CODE/recovery_narrow.sh                                                             # the reverse: 410/660 narrower than the library
   bash $CODE/round3.sh                                                                      # 660 timing, amplitude mismatch, matched grids, R(k), auto-picked records
   bash $CODE/round4.sh                                                                      # cold lower layer, Clapeyron 660, combined amplitude mismatch, chi2 by record count, block bootstrap
+  bash $CODE/round5.sh                                                                      # 410/660 widths by class and temperature, 660 degraded in the cold caps only, basalt-fraction prior
   python $CODE/compare_runs.py inv_v7_SS10 \
     "optimised (profile) A,τ instead of marginal=inv_v7_profile" \
     "independent-sample likelihood, bootstrap σ=inv_v7_pre_SS10" \
@@ -134,6 +135,8 @@ variants() {
     "both of the above=inv_v7_clap_t1300" \
     "recovery, uniform model, 410 x 1.2 and 660 x 0.8=recmm_410up660dn" \
     "recovery, uniform model, 410 x 0.8 and 660 x 1.2=recmm_410dn660up" \
+    "recovery, uniform model, 660 broadened 3 s and x 0.8 in the coldest half of caps=recmm_cold660" \
+    "recovery, uniform model, 660 broadened 6 s and x 0.8 in the coldest half of caps=recmm_cold660_6s" \
     --csv sensitivity_v7.csv
   python $CODE/misfit_by_window.py $(xs 10) $(inp 10) inv_v7_SS10 --lib $LIB --mech mech_filters_SS10_v7.npz    # where the M2 improvement sits
   python $CODE/pulse_widths.py     $(xs 10) $(inp 10) inv_v7_SS10 --lib $LIB --mech mech_filters_SS10_v7.npz    # observed vs synthetic pulse widths

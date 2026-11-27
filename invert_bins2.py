@@ -25,6 +25,7 @@ from scipy.ndimage import uniform_filter1d
 TW = (-300.0, -110.0); DT = 1.0
 TAUS = np.arange(-12, 13, 1)
 T2MIN = 1400
+FMAX = 0.6
 
 
 def parse(name):
@@ -44,7 +45,7 @@ def load_lib(files):
         z = np.load(f)
         for nm, s in zip(z["names"], z["S"]):
             p = parse(str(nm))
-            if p is None or p["f1"] > 0.6 or p["f2"] > 0.6 or not (1300 <= p["T1"] <= 2000) or not (T2MIN <= p["T2"] <= 2000):
+            if p is None or p["f1"] > FMAX or p["f2"] > FMAX or not (1300 <= p["T1"] <= 2000) or not (T2MIN <= p["T2"] <= 2000):
                 continue
             names.append(str(nm)); S.append(s.astype(np.float32)); meta.append(p)
         tg, dist = z["t"], z["dist"]
@@ -113,6 +114,8 @@ def main():
     ap.add_argument("obs_dir"); ap.add_argument("inputs_dir"); ap.add_argument("out")
     ap.add_argument("--lib", nargs="+", required=True); ap.add_argument("--mech", default=None)
     ap.add_argument("--d660", type=float, default=0.0); ap.add_argument("--dT-prior", type=float, nargs=2, default=None)
+    ap.add_argument("--fmax", type=float, default=0.6, help="highest basalt fraction admitted in any layer (default 0.6; the layered models exist only up to 0.6)")
+    ap.add_argument("--syn-caps", default=None, metavar="FILE", help="recovery test: apply the --syn-* perturbations only to the caps listed in FILE (one name per line); other caps get the unperturbed model")
     ap.add_argument("--t2min", type=int, default=1400, help="lowest potential temperature admitted for uniform models and for the lower layer (default 1400 K)")
     ap.add_argument("--clapeyron", type=float, default=0.0, metavar="DZDT",
                     help="move the 660 of every model with the temperature of its lower layer: depth change DZDT km/K (e.g. -0.075 for -2.8 MPa/K) relative to --t660-ref, converted to time at 0.35 s/km")
@@ -141,11 +144,11 @@ def main():
                     help="per-bin noise inflation: if the best model of all classes has reduced chi2 > 1, scale sigma by sqrt(chi2) so that it equals 1 (never deflate)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    global TW, TAUS, T2MIN
+    global TW, TAUS, T2MIN, FMAX
     if a.window: TW = tuple(a.window)
     TAUS = np.arange(-a.tau_max, a.tau_max + 1, 1)
 
-    T2MIN = a.t2min
+    T2MIN = a.t2min; FMAX = a.fmax
     names, S, meta, tg, dist = load_lib(a.lib)
     if a.exclude:
         keep = [i for i, n in enumerate(names) if not any(x in n for x in a.exclude)]; names = [names[i] for i in keep]; S = S[keep]; meta = [meta[i] for i in keep]
@@ -161,6 +164,7 @@ def main():
     rng = np.random.default_rng(a.seed)
     lp_dT = 0.0 if a.dT_prior is None else -0.5 * ((T2 - T1 - a.dT_prior[0]) / a.dT_prior[1]) ** 2
     isyn = names.index(a.synthetic) if a.synthetic else None
+    syn_caps = set(l.strip() for l in open(a.syn_caps) if l.strip()) if a.syn_caps else None
     d660 = a.d660 - a.s_per_km * a.clapeyron * (T2 - a.t660_ref)      # per-model 660 shift: colder lower layer -> deeper 660 -> earlier arrival (negative)
     if a.clapeyron:
         print(f"Clapeyron 660: {a.clapeyron} km/K about {a.t660_ref:.0f} K -> shifts from {d660.min():+.1f} to {d660.max():+.1f} s", flush=True)
@@ -199,9 +203,11 @@ def main():
             eps = rng.normal(0, 1.0, nt)
             if Rinv is not None: eps = Lchol @ eps          # correlated synthetic noise with the same R as the likelihood
             s = np.interp(tobs, t, sg) if a.noise_obs else np.full(nt, a.noise)   # per-cap bootstrap sigma or a fixed level
-            gsyn = perturb_pulse(G[isyn], tg, *a.syn_660, -300.0, -210.0); gsyn = perturb_pulse(gsyn, tg, *a.syn_410, -190.0, -110.0)   # discontinuity mismatch, data only
-            gsyn = narrow_pulse(gsyn, tg, a.syn_410_narrow, -190.0, -140.0); gsyn = narrow_pulse(gsyn, tg, a.syn_660_narrow, -265.0, -210.0)
-            gsyn = scale_pulse(gsyn, tg, a.syn_410_amp, -190.0, -140.0); gsyn = scale_pulse(gsyn, tg, a.syn_660_amp, -265.0, -210.0)
+            gsyn = G[isyn]
+            if syn_caps is None or name in syn_caps:   # discontinuity mismatch, data only (optionally in a subset of caps)
+                gsyn = perturb_pulse(gsyn, tg, *a.syn_660, -300.0, -210.0); gsyn = perturb_pulse(gsyn, tg, *a.syn_410, -190.0, -110.0)
+                gsyn = narrow_pulse(gsyn, tg, a.syn_410_narrow, -190.0, -140.0); gsyn = narrow_pulse(gsyn, tg, a.syn_660_narrow, -265.0, -210.0)
+                gsyn = scale_pulse(gsyn, tg, a.syn_410_amp, -190.0, -140.0); gsyn = scale_pulse(gsyn, tg, a.syn_660_amp, -265.0, -210.0)
             d = a.amp * gsyn[i0:i0 + nt] + s * eps
         else:
             d = np.interp(tobs, t, x); s = np.interp(tobs, t, sg) * a.noise_factor
@@ -261,7 +267,7 @@ def main():
         lat, lon = re.findall(r"(n?\d+\.?\d*)_(\d+\.?\d*)", name)[0]
         lat = -float(lat[1:]) if lat.startswith("n") else float(lat); lon = float(lon)
         out = dict(bin=name, lat=lat, lon=lon, n_records=nrec, n_data=nt, chi2_red_best=float(chi2), lnB10=float(lnB10), lnB21=float(lnB21),
-                   d660=a.d660, clapeyron=a.clapeyron, t2min=a.t2min, dT_prior=a.dT_prior, shape_only=a.shape_only, mech=bool(mech), noise_scale=float(nscale), marginal=bool(a.marginal), corr_noise=a.corr_noise, classes=res)
+                   d660=a.d660, clapeyron=a.clapeyron, t2min=a.t2min, fmax=a.fmax, syn_caps=a.syn_caps, dT_prior=a.dT_prior, shape_only=a.shape_only, mech=bool(mech), noise_scale=float(nscale), marginal=bool(a.marginal), corr_noise=a.corr_noise, classes=res)
         json.dump(out, open(os.path.join(a.out, name + ".json"), "w"), indent=1)
         rows.append((lat, lon, chi2, lnB10, lnB21, res.get("M1", {}).get("mean_dT", float("nan")), res.get("M2", {}).get("mean_df", float("nan")),
                      f1[ib], f2[ib], T1[ib], T2[ib], best_A[ib], best_tau[ib], nrec))

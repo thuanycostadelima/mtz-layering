@@ -81,7 +81,7 @@ bash code/run_v7.sh recovery       # recovery tests at a fixed noise level (Supp
 bash code/recovery_obsnoise.sh     # recovery tests at each cap's own noise level, with the comparison by record count
 bash code/run_v7.sh variants       # sensitivity variants, fit-window tests, mismatch recovery tests and sensitivity_v7.csv (Supplementary Table 1);
                                    #   also misfit_by_window.py (where the M2 improvement sits), pulse_widths.py (observed vs synthetic pulse widths),
-                                   #   round3.sh and round4.sh (660 timing, cold lower layer, amplitude mismatch, matched grids, chi2 by record count, block bootstrap)
+                                   #   round3.sh, round4.sh and round5.sh (660 timing, cold lower layer, amplitude mismatch, matched grids, chi2 by record count, block bootstrap, pulse widths by class, 660 degraded in cold caps only)
 bash code/run_v7.sh pp             # PP calibration stacks and filter (Fig. 2f)
 bash code/run_v7.sh picks          # arrival picks (Supplementary Figs. 4, 9)
 bash code/run_v7.sh export         # v7_SS<r>_results.csv and v7_SS<r>_fields.csv
@@ -89,7 +89,7 @@ bash code/run_v7.sh export         # v7_SS<r>_results.csv and v7_SS<r>_fields.cs
 
 `bash code/run_v7.sh all` runs steps 3–4 for every radius in order (several hours; resumable).
 
-The inversion script `invert_bins2.py` takes, for one radius, the observed stacks, the record lists, the library files (`--lib`), the mechanism filters (`--mech`), the noise covariance (`--corr-noise`) and writes one JSON per cap with the log-evidence of each class, the Bayes factors, posterior means and the best model. Options used in the paper: `--noise-fit` (per-cap σ inflation), `--marginal` (marginalised A and τ), `--synthetic <model> --amp 0.6 --noise 0.004` (recovery tests), `--dT-prior`, `--no-geometry`, `--exclude`, `--window` (sensitivity variants), `--noise-obs`, `--syn-660`, `--syn-410`, `--syn-410-narrow`, `--syn-660-narrow`, `--syn-410-amp`, `--syn-660-amp` (recovery tests at the observed noise level and with a mismatched discontinuity), `--t2min` (lower-layer temperature floor) and `--clapeyron` (660 depth moving with the lower-layer temperature).
+The inversion script `invert_bins2.py` takes, for one radius, the observed stacks, the record lists, the library files (`--lib`), the mechanism filters (`--mech`), the noise covariance (`--corr-noise`) and writes one JSON per cap with the log-evidence of each class, the Bayes factors, posterior means and the best model. Options used in the paper: `--noise-fit` (per-cap σ inflation), `--marginal` (marginalised A and τ), `--synthetic <model> --amp 0.6 --noise 0.004` (recovery tests), `--dT-prior`, `--no-geometry`, `--exclude`, `--window` (sensitivity variants), `--noise-obs`, `--syn-660`, `--syn-410`, `--syn-410-narrow`, `--syn-660-narrow`, `--syn-410-amp`, `--syn-660-amp` (recovery tests at the observed noise level and with a mismatched discontinuity), `--t2min` (lower-layer temperature floor), `--clapeyron` (660 depth moving with the lower-layer temperature), `--fmax` (basalt-fraction range) and `--syn-caps` (perturbation restricted to a list of caps).
 
 ### 5. Figures
 
