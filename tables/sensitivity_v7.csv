@@ -36,3 +36,5 @@ lower layer and uniform models down to 1300 K,525,74,14,12,100,1.00,99
 both of the above,525,69,17,15,100,0.79,77
 "recovery, uniform model, 410 x 1.2 and 660 x 0.8",525,82,0,18,100,0.11,68
 "recovery, uniform model, 410 x 0.8 and 660 x 1.2",525,88,0,12,0,0.15,72
+"recovery, uniform model, 660 broadened 3 s and x 0.8 in the coldest half of caps",525,91,0,9,96,0.15,72
+"recovery, uniform model, 660 broadened 6 s and x 0.8 in the coldest half of caps",525,79,1,21,98,0.18,68
